@@ -34,8 +34,13 @@ This project is a browser-based barcode scanner intended for mobile and desktop 
   git commit -m "<message>"
   git push origin main
 
+## Camera workflow
+- Start Camera button opens the camera only.
+- Scan Barcode button performs the actual read.
+- This avoids false camera errors when the user has not yet aligned a barcode in the frame.
+
 ## Known issues and fixes
-- iPhone camera compatibility: avoid exact device IDs; use default camera via getUserMedia + decodeFromVideoElement.
+- iPhone camera compatibility: avoid exact device IDs; use default camera via getUserMedia + decodeOnceFromVideoElement.
 - Duplicate scan blocking: add a scanLock guard to prevent repeated decode events from creating duplicate reads.
 
 ## Deployment notes

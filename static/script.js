@@ -3,6 +3,7 @@ const statusText = document.getElementById('statusText');
 const lastCodeEl = document.getElementById('lastCode');
 const scanTableBody = document.getElementById('scanTableBody');
 const startScannerBtn = document.getElementById('startScannerBtn');
+const scanNowBtn = document.getElementById('scanNowBtn');
 const stopScannerBtn = document.getElementById('stopScannerBtn');
 const manualCodeInput = document.getElementById('manualCodeInput');
 const saveManualBtn = document.getElementById('saveManualBtn');
@@ -13,6 +14,7 @@ let codeReader = null;
 let stream = null;
 let scanHistory = [];
 let scanLock = false;
+let cameraReady = false;
 
 function setStatus(message) {
   statusText.textContent = message;
@@ -123,8 +125,9 @@ async function startScanner() {
     return;
   }
 
-  if (stream) {
-    stopScanner();
+  if (stream && video.srcObject) {
+    setStatus('Camera is already active.');
+    return;
   }
 
   try {
@@ -139,58 +142,72 @@ async function startScanner() {
 
     video.srcObject = stream;
     await video.play();
+    cameraReady = true;
 
-    if (!codeReader) {
-      codeReader = new ZXing.BrowserMultiFormatReader();
-    }
-
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.UPC_A,
-      ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.CODE_93,
-      ZXing.BarcodeFormat.ITF,
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-    await codeReader.decodeFromVideoElement(video, async (result, error) => {
-      if (!result || scanLock) {
-        if (error && error.name !== 'NotFoundException') {
-          console.error(error);
-        }
-        return;
-      }
-
-      const decodedText = String(result.getText()).trim();
-      if (!decodedText) {
-        return;
-      }
-
-      scanLock = true;
-      setStatus(`Barcode read: ${decodedText}`);
-      await saveScanToServer(decodedText);
-
-      setTimeout(() => {
-        scanLock = false;
-        setStatus('Scanner active. Point the camera at a barcode.');
-      }, 1200);
-    }, hints);
-
-    setStatus('Scanner active. Point the camera at a barcode.');
+    setStatus('Camera ready. Tap Scan Barcode to read the code.');
   } catch (error) {
     console.error(error);
+    cameraReady = false;
     setStatus('Could not start the camera. Please allow camera access and try again.');
   }
 }
 
+async function scanNow() {
+  if (!cameraReady || !stream || !video.srcObject) {
+    setStatus('Start the camera first, then scan.');
+    return;
+  }
+
+  if (!codeReader) {
+    codeReader = new ZXing.BrowserMultiFormatReader();
+  }
+
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A,
+    ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.CODE_93,
+    ZXing.BarcodeFormat.ITF,
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+  try {
+    setStatus('Scanning barcode...');
+    const result = await codeReader.decodeOnceFromVideoElement(video, hints);
+
+    if (!result) {
+      setStatus('No barcode found. Hold steady and try again.');
+      return;
+    }
+
+    const decodedText = String(result.getText()).trim();
+    if (!decodedText) {
+      setStatus('No barcode found. Hold steady and try again.');
+      return;
+    }
+
+    await saveScanToServer(decodedText);
+    setStatus(`Barcode read: ${decodedText}`);
+  } catch (error) {
+    console.error(error);
+    setStatus('No barcode found. Hold steady and try again.');
+  }
+}
+
 function stopScanner() {
+  cameraReady = false;
+
   if (codeReader && typeof codeReader.reset === 'function') {
-    codeReader.reset();
+    try {
+      codeReader.reset();
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   if (stream) {
@@ -217,6 +234,7 @@ async function addManualCode() {
 }
 
 startScannerBtn.addEventListener('click', startScanner);
+scanNowBtn.addEventListener('click', scanNow);
 stopScannerBtn.addEventListener('click', stopScanner);
 saveManualBtn.addEventListener('click', addManualCode);
 downloadCsvBtn.addEventListener('click', exportCsv);
