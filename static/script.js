@@ -125,20 +125,15 @@ async function startScanner() {
   try {
     setStatus('Requesting camera permission...');
 
-    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-    const rearCamera = devices.find((device) => /rear|back|environment/i.test(device.label));
-    const selectedDeviceId = rearCamera ? rearCamera.deviceId : devices[0]?.deviceId;
-
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-        facingMode: 'environment',
+        facingMode: { ideal: 'environment' },
       },
       audio: false,
     });
 
     video.srcObject = stream;
-    video.play();
+    await video.play();
 
     if (!codeReader) {
       codeReader = new ZXing.BrowserMultiFormatReader();
@@ -157,7 +152,7 @@ async function startScanner() {
       ZXing.BarcodeFormat.ITF,
     ]);
 
-    await codeReader.decodeFromVideoDevice(selectedDeviceId, video, async (result, error) => {
+    await codeReader.decodeFromVideoElement(video, async (result, error) => {
       if (result) {
         const decodedText = result.getText();
         await saveScanToServer(decodedText);
