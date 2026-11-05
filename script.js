@@ -13,6 +13,7 @@ let codeReader = null;
 let stream = null;
 let scanHistory = [];
 let scanLock = false;
+let scannerRunning = false;
 
 function setStatus(message) {
   statusText.textContent = message;
@@ -116,8 +117,9 @@ async function startScanner() {
     return;
   }
 
-  if (stream) {
-    stopScanner();
+  if (stream && video.srcObject) {
+    setStatus('Camera is already active. Scanner is running.');
+    return;
   }
 
   try {
@@ -151,6 +153,7 @@ async function startScanner() {
     ]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
+    scannerRunning = true;
     await codeReader.decodeFromVideoElement(video, (result, error) => {
       if (!result || scanLock) {
         if (error && error.name !== 'NotFoundException') {
@@ -174,16 +177,28 @@ async function startScanner() {
       }, 1200);
     }, hints);
 
-    setStatus('Scanner is active. Point the camera at a barcode.');
+    setStatus('Camera is on. Scanner is active. Point the camera at a barcode.');
   } catch (error) {
     console.error(error);
+
+    if (stream && video.srcObject) {
+      setStatus('Camera is on. Scanner is active. Point the camera at a barcode.');
+      return;
+    }
+
     setStatus('Could not start the camera. Please allow camera access and try again.');
   }
 }
 
 function stopScanner() {
+  scannerRunning = false;
+
   if (codeReader && typeof codeReader.reset === 'function') {
-    codeReader.reset();
+    try {
+      codeReader.reset();
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   if (stream) {
