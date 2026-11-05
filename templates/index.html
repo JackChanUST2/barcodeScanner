@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shared Barcode Scanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Shared Inventory</p>
+          <h1>Barcode Scanner</h1>
+        </div>
+      </header>
+
+      <section class="scanner-card">
+        <div class="video-wrap">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="scan-line" aria-hidden="true"></div>
+        </div>
+
+        <div class="controls">
+          <button id="startScannerBtn" class="primary">Start Scanner</button>
+          <button id="stopScannerBtn" class="secondary">Stop</button>
+        </div>
+
+        <div class="status-panel">
+          <span class="status-label">Status</span>
+          <p id="statusText">Camera is ready when you start scanning.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Latest scan</h2>
+        <div id="lastCode" class="last-code">No scan yet</div>
+
+        <div class="manual-entry">
+          <label for="manualCodeInput">Enter barcode manually</label>
+          <div class="manual-row">
+            <input id="manualCodeInput" type="text" placeholder="e.g. 1234567890" />
+            <button id="saveManualBtn" class="secondary">Save</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="history-header">
+          <h2>Shared scan history</h2>
+          <div class="export-actions">
+            <button id="downloadCsvBtn" class="secondary small">Export CSV</button>
+            <button id="downloadXlsxBtn" class="primary small">Export Excel</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Barcode</th>
+              </tr>
+            </thead>
+            <tbody id="scanTableBody">
+              <tr>
+                <td colspan="2" class="empty-state">No barcodes saved yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>
