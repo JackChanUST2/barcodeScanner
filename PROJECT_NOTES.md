@@ -5,9 +5,10 @@ This project is a browser-based barcode scanner intended for mobile and desktop 
 
 ## Current architecture
 - Backend: Flask web app in app.py
-- Frontend: HTML in templates/index.html and static script files
+- Frontend: HTML in templates/index.html and static assets under static/
 - Shared data: SQLite database stored as barcode_scans.db
 - Deployment target: Render (public web app)
+- Duplicate root-level frontend files were removed to keep the project maintainable and avoid confusion
 
 ## Key files
 - app.py: Flask server and SQLite API
