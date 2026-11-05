@@ -12,6 +12,7 @@ const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 let codeReader = null;
 let stream = null;
 let scanHistory = [];
+let scanLock = false;
 
 function setStatus(message) {
   statusText.textContent = message;
@@ -115,23 +116,22 @@ async function startScanner() {
     return;
   }
 
+  if (stream) {
+    stopScanner();
+  }
+
   try {
     setStatus('Requesting camera permission...');
 
-    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-    const rearCamera = devices.find((device) => /rear|back|environment/i.test(device.label));
-    const selectedDeviceId = rearCamera ? rearCamera.deviceId : devices[0]?.deviceId;
-
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-        facingMode: 'environment',
+        facingMode: { ideal: 'environment' },
       },
       audio: false,
     });
 
     video.srcObject = stream;
-    video.play();
+    await video.play();
 
     if (!codeReader) {
       codeReader = new ZXing.BrowserMultiFormatReader();
@@ -149,17 +149,29 @@ async function startScanner() {
       ZXing.BarcodeFormat.CODE_93,
       ZXing.BarcodeFormat.ITF,
     ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
-    await codeReader.decodeFromVideoDevice(selectedDeviceId, video, (result, error) => {
-      if (result) {
-        const decodedText = result.getText();
-        saveScan(decodedText);
-        setStatus(`Barcode read: ${decodedText}`);
+    await codeReader.decodeFromVideoElement(video, (result, error) => {
+      if (!result || scanLock) {
+        if (error && error.name !== 'NotFoundException') {
+          console.error(error);
+        }
+        return;
       }
 
-      if (error && error.name !== 'NotFoundException') {
-        console.error(error);
+      const decodedText = String(result.getText()).trim();
+      if (!decodedText) {
+        return;
       }
+
+      scanLock = true;
+      saveScan(decodedText);
+      setStatus(`Barcode read: ${decodedText}`);
+
+      setTimeout(() => {
+        scanLock = false;
+        setStatus('Scanner is active. Point the camera at a barcode.');
+      }, 1200);
     }, hints);
 
     setStatus('Scanner is active. Point the camera at a barcode.');

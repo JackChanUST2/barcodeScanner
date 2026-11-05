@@ -12,6 +12,7 @@ const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 let codeReader = null;
 let stream = null;
 let scanHistory = [];
+let scanLock = false;
 
 function setStatus(message) {
   statusText.textContent = message;
@@ -122,6 +123,10 @@ async function startScanner() {
     return;
   }
 
+  if (stream) {
+    stopScanner();
+  }
+
   try {
     setStatus('Requesting camera permission...');
 
@@ -151,16 +156,29 @@ async function startScanner() {
       ZXing.BarcodeFormat.CODE_93,
       ZXing.BarcodeFormat.ITF,
     ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
     await codeReader.decodeFromVideoElement(video, async (result, error) => {
-      if (result) {
-        const decodedText = result.getText();
-        await saveScanToServer(decodedText);
+      if (!result || scanLock) {
+        if (error && error.name !== 'NotFoundException') {
+          console.error(error);
+        }
+        return;
       }
 
-      if (error && error.name !== 'NotFoundException') {
-        console.error(error);
+      const decodedText = String(result.getText()).trim();
+      if (!decodedText) {
+        return;
       }
+
+      scanLock = true;
+      setStatus(`Barcode read: ${decodedText}`);
+      await saveScanToServer(decodedText);
+
+      setTimeout(() => {
+        scanLock = false;
+        setStatus('Scanner active. Point the camera at a barcode.');
+      }, 1200);
     }, hints);
 
     setStatus('Scanner active. Point the camera at a barcode.');
