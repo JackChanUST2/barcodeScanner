@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Barcode Scanner</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>Barcode Scanner</h1>
+      <p class="hint">Scan a product barcode and view its number.</p>
+
+      <div class="camera-wrap">
+        <video id="camera" playsinline autoplay muted></video>
+      </div>
+
+      <div class="controls">
+        <button id="start-scan" type="button">Start scanning</button>
+      </div>
+
+      <p id="status" class="status" role="status">Ready to scan.</p>
+      <output id="barcode-result" class="result" aria-live="polite">No barcode detected yet</output>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
