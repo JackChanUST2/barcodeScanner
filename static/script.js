@@ -227,13 +227,30 @@ function stopScanner() {
   setStatus('Scanner stopped.');
 }
 
+function normalizeBarcodeValue(value) {
+  return value.replace(/\s+/g, '').trim();
+}
+
 async function addManualCode() {
-  const value = manualCodeInput.value.trim();
+  const rawValue = manualCodeInput.value || '';
+  const value = normalizeBarcodeValue(rawValue);
+
   if (!value) {
+    manualCodeInput.setCustomValidity('Please enter a barcode value before saving.');
+    manualCodeInput.reportValidity();
     setStatus('Type a barcode value before saving.');
     return;
   }
 
+  const validPattern = /^[A-Za-z0-9\-\.\/\+]+$/;
+  if (!validPattern.test(value)) {
+    manualCodeInput.setCustomValidity('Barcode values can contain letters, numbers, and common barcode characters only.');
+    manualCodeInput.reportValidity();
+    setStatus('Barcode values can contain only letters, numbers, and common barcode characters.');
+    return;
+  }
+
+  manualCodeInput.setCustomValidity('');
   manualCodeInput.value = '';
   await saveScanToServer(value);
 }

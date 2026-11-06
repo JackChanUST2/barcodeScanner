@@ -42,7 +42,14 @@
         <div class="manual-entry">
           <label for="manualCodeInput">Enter barcode manually</label>
           <div class="manual-row">
-            <input id="manualCodeInput" type="text" placeholder="e.g. 1234567890" />
+            <input
+              id="manualCodeInput"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              pattern="[A-Za-z0-9\-\.\/\+\s]+"
+              placeholder="e.g. 1234567890"
+            />
             <button id="saveManualBtn" class="secondary">Save</button>
           </div>
         </div>
