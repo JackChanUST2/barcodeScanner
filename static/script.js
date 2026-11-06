@@ -1,5 +1,6 @@
 const video = document.getElementById('video');
 const statusText = document.getElementById('statusText');
+const debugText = document.getElementById('debugText');
 const lastCodeEl = document.getElementById('lastCode');
 const scanTableBody = document.getElementById('scanTableBody');
 const startScannerBtn = document.getElementById('startScannerBtn');
@@ -15,9 +16,18 @@ let stream = null;
 let scanHistory = [];
 let scanLock = false;
 let cameraReady = false;
+let lastDebugMessage = 'waiting for camera state';
+let scanAttempts = 0;
 
 function setStatus(message) {
   statusText.textContent = message;
+}
+
+function setDebug(message) {
+  lastDebugMessage = message;
+  if (debugText) {
+    debugText.textContent = `Debug: ${message}`;
+  }
 }
 
 function renderHistory() {
@@ -137,6 +147,7 @@ async function startScanner() {
 
   try {
     setStatus('Requesting camera permission...');
+    setDebug('requesting camera access via getUserMedia');
 
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
@@ -150,16 +161,21 @@ async function startScanner() {
     cameraReady = true;
 
     setStatus('Camera ready. Tap Scan Barcode to read the code.');
+    setDebug(`camera started: active=${Boolean(stream)} ready=${cameraReady} tracks=${stream.getVideoTracks().length}`);
   } catch (error) {
     console.error(error);
     cameraReady = false;
     setStatus('Could not start the camera. Please allow camera access and try again.');
+    setDebug(`camera start failed: ${error.name || 'Error'} - ${error.message || 'unknown camera error'}`);
   }
 }
 
 async function scanNow() {
+  scanAttempts += 1;
+
   if (!cameraReady || !stream || !video.srcObject) {
     setStatus('Start the camera first, then scan.');
+    setDebug(`scan blocked: cameraReady=${cameraReady} streamExists=${Boolean(stream)} videoReady=${Boolean(video.srcObject)} attempt=${scanAttempts}`);
     return;
   }
 
@@ -183,24 +199,29 @@ async function scanNow() {
 
   try {
     setStatus('Scanning barcode...');
+    setDebug(`attempt=${scanAttempts} active=${Boolean(stream)} video=${Boolean(video.srcObject)} decode-start`);
     const result = await codeReader.decodeOnceFromVideoElement(video, hints);
 
     if (!result) {
       setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
+      setDebug(`attempt=${scanAttempts} result=null; frame likely empty or barcode not in view`);
       return;
     }
 
     const decodedText = String(result.getText()).trim();
     if (!decodedText) {
       setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
+      setDebug(`attempt=${scanAttempts} result text empty`);
       return;
     }
 
+    setDebug(`attempt=${scanAttempts} decoded text length=${decodedText.length}`);
     await saveScanToServer(decodedText);
     setStatus(`Barcode read: ${decodedText}`);
   } catch (error) {
     console.error(error);
     setStatus('Scan failed while reading the frame. Try again or enter the barcode manually.');
+    setDebug(`attempt=${scanAttempts} decode error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
   }
 }
 
@@ -225,6 +246,7 @@ function stopScanner() {
   }
 
   setStatus('Scanner stopped.');
+  setDebug('camera stopped; ready=false');
 }
 
 function normalizeBarcodeValue(value) {
@@ -264,3 +286,4 @@ downloadXlsxBtn.addEventListener('click', exportExcel);
 
 loadScans();
 setStatus('Ready to scan.');
+setDebug('initial state: page loaded, waiting for camera');
