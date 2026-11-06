@@ -12,7 +12,7 @@ const saveManualBtn = document.getElementById('saveManualBtn');
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 
-const APP_VERSION = '1.01';
+const APP_VERSION = '1.02';
 
 let codeReader = null;
 let stream = null;
