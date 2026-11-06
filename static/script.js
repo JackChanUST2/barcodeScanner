@@ -52,7 +52,12 @@ async function loadScans() {
     renderHistory();
   } catch (error) {
     console.error(error);
-    setStatus('Unable to load the shared scan list.');
+    if (!scanHistory.length) {
+      lastCodeEl.textContent = 'No scan yet';
+    }
+    if (statusText.textContent === 'Ready to scan.' || statusText.textContent === 'Camera is ready when you start scanning.') {
+      setStatus('Ready to scan. Shared scan list will update when the server is available.');
+    }
   }
 }
 
@@ -181,13 +186,13 @@ async function scanNow() {
     const result = await codeReader.decodeOnceFromVideoElement(video, hints);
 
     if (!result) {
-      setStatus('No barcode found. Hold steady and try again.');
+      setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
       return;
     }
 
     const decodedText = String(result.getText()).trim();
     if (!decodedText) {
-      setStatus('No barcode found. Hold steady and try again.');
+      setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
       return;
     }
 
@@ -195,7 +200,7 @@ async function scanNow() {
     setStatus(`Barcode read: ${decodedText}`);
   } catch (error) {
     console.error(error);
-    setStatus('No barcode found. Hold steady and try again.');
+    setStatus('Scan failed while reading the frame. Try again or enter the barcode manually.');
   }
 }
 
