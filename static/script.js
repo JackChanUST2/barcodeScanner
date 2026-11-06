@@ -187,7 +187,13 @@ async function scanNow() {
   }
 
   if (!codeReader) {
-    codeReader = new ZXing.BrowserMultiFormatReader();
+    if (typeof ZXing.BrowserMultiFormatReader === 'function') {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+    } else if (typeof ZXing.BrowserCodeReader === 'function') {
+      codeReader = new ZXing.BrowserCodeReader();
+    } else {
+      throw new Error('ZXing browser reader is not available in this browser build.');
+    }
   }
 
   const hints = new Map();
@@ -204,10 +210,23 @@ async function scanNow() {
   ]);
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
+  const decodeMethod =
+    typeof codeReader.decodeOnceFromVideoElement === 'function'
+      ? codeReader.decodeOnceFromVideoElement.bind(codeReader)
+      : typeof codeReader.decodeFromVideoElement === 'function'
+        ? codeReader.decodeFromVideoElement.bind(codeReader)
+        : typeof codeReader.decodeOnceFromVideoDevice === 'function'
+          ? () => codeReader.decodeOnceFromVideoDevice(undefined, video, hints)
+          : null;
+
+  if (!decodeMethod) {
+    throw new Error('This ZXing build does not support the browser decode API used by the app.');
+  }
+
   try {
     setStatus('Scanning barcode...');
     setDebug(`attempt=${scanAttempts} active=${Boolean(stream)} video=${Boolean(video.srcObject)} decode-start`);
-    const result = await codeReader.decodeOnceFromVideoElement(video, hints);
+    const result = await decodeMethod(video, hints);
 
     if (!result) {
       setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
