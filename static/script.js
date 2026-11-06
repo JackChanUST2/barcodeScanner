@@ -1,3 +1,4 @@
+const appVersionEl = document.getElementById('appVersion');
 const video = document.getElementById('video');
 const statusText = document.getElementById('statusText');
 const debugText = document.getElementById('debugText');
@@ -11,6 +12,8 @@ const saveManualBtn = document.getElementById('saveManualBtn');
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 
+const APP_VERSION = '1.01';
+
 let codeReader = null;
 let stream = null;
 let scanHistory = [];
@@ -18,6 +21,10 @@ let scanLock = false;
 let cameraReady = false;
 let lastDebugMessage = 'waiting for camera state';
 let scanAttempts = 0;
+
+if (appVersionEl) {
+  appVersionEl.textContent = `v${APP_VERSION}`;
+}
 
 function setStatus(message) {
   statusText.textContent = message;

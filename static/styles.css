@@ -38,7 +38,25 @@ body {
   box-shadow: var(--shadow);
 }
 
-.topbar { padding: 20px 22px; }
+.topbar {
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-version {
+  background: #edf4ff;
+  color: var(--primary-dark);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   text-transform: uppercase;
