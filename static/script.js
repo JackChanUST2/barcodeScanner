@@ -1,3 +1,5 @@
+// Key DOM references for the scanner UI.
+// These elements are the "live wiring" between the page and the browser logic.
 const appVersionEl = document.getElementById('appVersion');
 const video = document.getElementById('video');
 const statusText = document.getElementById('statusText');
@@ -12,8 +14,15 @@ const saveManualBtn = document.getElementById('saveManualBtn');
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 
+// Current app version shown in the top header.
 const APP_VERSION = '1.02';
 
+// Important runtime variables:
+// - codeReader: ZXing reader instance for live frame decoding.
+// - stream: active camera stream from getUserMedia.
+// - scanHistory: latest barcode entries loaded from the backend.
+// - cameraReady: tells the app whether the camera is ready to decode.
+// - scanAttempts: counts scan attempts for debug output.
 let codeReader = null;
 let stream = null;
 let scanHistory = [];
@@ -26,10 +35,12 @@ if (appVersionEl) {
   appVersionEl.textContent = `v${APP_VERSION}`;
 }
 
+// Updates the user-facing status text in the status panel.
 function setStatus(message) {
   statusText.textContent = message;
 }
 
+// Writes a short technical debug message used during troubleshooting.
 function setDebug(message) {
   lastDebugMessage = message;
   if (debugText) {
@@ -37,6 +48,7 @@ function setDebug(message) {
   }
 }
 
+// Renders the shared scan table from the current scanHistory array.
 function renderHistory() {
   if (!scanHistory.length) {
     scanTableBody.innerHTML = '<tr><td colspan="2" class="empty-state">No barcodes saved yet.</td></tr>';
@@ -55,6 +67,7 @@ function renderHistory() {
     .join('');
 }
 
+// Fetches all saved scans from the Flask backend and refreshes the UI.
 async function loadScans() {
   try {
     const response = await fetch('/api/scans');
@@ -78,6 +91,7 @@ async function loadScans() {
   }
 }
 
+// Sends one scanned barcode to the backend and refreshes the shared history.
 async function saveScanToServer(barcode) {
   try {
     const response = await fetch('/api/scans', {
@@ -101,6 +115,7 @@ async function saveScanToServer(barcode) {
   }
 }
 
+// Exports the current history as CSV for spreadsheet use.
 function exportCsv() {
   if (!scanHistory.length) {
     setStatus('No scans to export yet.');
@@ -123,6 +138,7 @@ function exportCsv() {
   setStatus('CSV exported.');
 }
 
+// Exports the same history as Excel (.xlsx) for office workflows.
 function exportExcel() {
   if (!scanHistory.length) {
     setStatus('No scans to export yet.');
@@ -141,6 +157,7 @@ function exportExcel() {
   setStatus('Excel exported.');
 }
 
+// Starts the camera stream and prepares the app for scanning.
 async function startScanner() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     setStatus('This browser does not support camera access.');
@@ -177,6 +194,7 @@ async function startScanner() {
   }
 }
 
+// Tries to decode a barcode from the current camera frame.
 async function scanNow() {
   scanAttempts += 1;
 
@@ -251,6 +269,7 @@ async function scanNow() {
   }
 }
 
+// Stops the live camera feed and clears the ZXing reader state.
 function stopScanner() {
   cameraReady = false;
 
@@ -275,10 +294,12 @@ function stopScanner() {
   setDebug('camera stopped; ready=false');
 }
 
+// Removes whitespace so manual entry matches typical barcode strings.
 function normalizeBarcodeValue(value) {
   return value.replace(/\s+/g, '').trim();
 }
 
+// Saves a manually entered barcode if it matches the supported value format.
 async function addManualCode() {
   const rawValue = manualCodeInput.value || '';
   const value = normalizeBarcodeValue(rawValue);
@@ -303,6 +324,7 @@ async function addManualCode() {
   await saveScanToServer(value);
 }
 
+// Event wiring for the UI buttons.
 startScannerBtn.addEventListener('click', startScanner);
 scanNowBtn.addEventListener('click', scanNow);
 stopScannerBtn.addEventListener('click', stopScanner);
@@ -310,6 +332,7 @@ saveManualBtn.addEventListener('click', addManualCode);
 downloadCsvBtn.addEventListener('click', exportCsv);
 downloadXlsxBtn.addEventListener('click', exportExcel);
 
+// Initial app state when the page first loads.
 loadScans();
 setStatus('Ready to scan.');
 setDebug('initial state: page loaded, waiting for camera');
