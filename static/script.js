@@ -15,7 +15,7 @@ const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 
 // Current app version shown in the top header.
-const APP_VERSION = '1.02';
+const APP_VERSION = '1.03';
 
 // Important runtime variables:
 // - codeReader: ZXing reader instance for live frame decoding.
