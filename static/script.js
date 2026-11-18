@@ -15,7 +15,7 @@ const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 
 // Current app version shown in the top header.
-const APP_VERSION = '1.03';
+const APP_VERSION = '1.04';
 
 // Important runtime variables:
 // - codeReader: ZXing reader instance for live frame decoding.
@@ -30,6 +30,8 @@ let scanLock = false;
 let cameraReady = false;
 let lastDebugMessage = 'waiting for camera state';
 let scanAttempts = 0;
+let scannerControls = null;
+let latestDetectedCode = '';
 
 if (appVersionEl) {
   appVersionEl.textContent = `v${APP_VERSION}`;
@@ -184,17 +186,79 @@ async function startScanner() {
     await video.play();
     cameraReady = true;
 
-    setStatus('Camera ready. Tap Scan Barcode to read the code.');
+    if (!codeReader) {
+      if (typeof ZXing.BrowserMultiFormatReader === 'function') {
+        codeReader = new ZXing.BrowserMultiFormatReader();
+      } else if (typeof ZXing.BrowserCodeReader === 'function') {
+        codeReader = new ZXing.BrowserCodeReader();
+      } else {
+        throw new Error('ZXing browser reader is not available in this browser build.');
+      }
+    }
+
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.CODE_93,
+      ZXing.BarcodeFormat.ITF,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+    if (typeof codeReader.decodeFromVideoDevice === 'function') {
+      scannerControls = await codeReader.decodeFromVideoDevice(undefined, video, (result, error) => {
+        if (result) {
+          const decodedText = String(result.getText()).trim();
+          if (decodedText) {
+            latestDetectedCode = decodedText;
+            setDebug(`searching active: latest detected=${decodedText}`);
+          }
+          return;
+        }
+
+        if (!error) {
+          return;
+        }
+
+        const expectedErrors = ['NotFoundException', 'ChecksumException', 'FormatException'];
+        if (expectedErrors.includes(error.name)) {
+          return;
+        }
+
+        setDebug(`searching error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
+      }, hints);
+    } else {
+      throw new Error('This ZXing build does not support continuous camera decoding.');
+    }
+
+    setStatus('Camera started. Searching for barcodes...');
     setDebug(`camera started: active=${Boolean(stream)} ready=${cameraReady} tracks=${stream.getVideoTracks().length}`);
   } catch (error) {
     console.error(error);
     cameraReady = false;
+    latestDetectedCode = '';
+    scannerControls = null;
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+
+    if (video) {
+      video.srcObject = null;
+    }
+
     setStatus('Could not start the camera. Please allow camera access and try again.');
     setDebug(`camera start failed: ${error.name || 'Error'} - ${error.message || 'unknown camera error'}`);
   }
 }
 
-// Tries to decode a barcode from the current camera frame.
+// Saves the latest detected barcode while camera search continues in the background.
 async function scanNow() {
   scanAttempts += 1;
 
@@ -204,74 +268,47 @@ async function scanNow() {
     return;
   }
 
-  if (!codeReader) {
-    if (typeof ZXing.BrowserMultiFormatReader === 'function') {
-      codeReader = new ZXing.BrowserMultiFormatReader();
-    } else if (typeof ZXing.BrowserCodeReader === 'function') {
-      codeReader = new ZXing.BrowserCodeReader();
-    } else {
-      throw new Error('ZXing browser reader is not available in this browser build.');
-    }
+  if (!scannerControls) {
+    setStatus('Camera is active, but barcode search is not running yet. Restart the camera.');
+    setDebug(`scan blocked: scannerControls missing attempt=${scanAttempts}`);
+    return;
   }
 
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.UPC_E,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.CODE_93,
-    ZXing.BarcodeFormat.ITF,
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-  const decodeMethod =
-    typeof codeReader.decodeOnceFromVideoElement === 'function'
-      ? codeReader.decodeOnceFromVideoElement.bind(codeReader)
-      : typeof codeReader.decodeFromVideoElement === 'function'
-        ? codeReader.decodeFromVideoElement.bind(codeReader)
-        : typeof codeReader.decodeOnceFromVideoDevice === 'function'
-          ? () => codeReader.decodeOnceFromVideoDevice(undefined, video, hints)
-          : null;
-
-  if (!decodeMethod) {
-    throw new Error('This ZXing build does not support the browser decode API used by the app.');
+  if (!latestDetectedCode) {
+    setStatus('No barcode detected yet. Keep the barcode in frame and try again.');
+    setDebug(`scan blocked: no detected barcode available attempt=${scanAttempts}`);
+    return;
   }
 
+  if (scanLock) {
+    setStatus('A barcode save is already in progress.');
+    return;
+  }
+
+  scanLock = true;
   try {
-    setStatus('Scanning barcode...');
-    setDebug(`attempt=${scanAttempts} active=${Boolean(stream)} video=${Boolean(video.srcObject)} decode-start`);
-    const result = await decodeMethod(video, hints);
-
-    if (!result) {
-      setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
-      setDebug(`attempt=${scanAttempts} result=null; frame likely empty or barcode not in view`);
-      return;
-    }
-
-    const decodedText = String(result.getText()).trim();
-    if (!decodedText) {
-      setStatus('No barcode was visible in the frame. Move the camera closer and try again.');
-      setDebug(`attempt=${scanAttempts} result text empty`);
-      return;
-    }
-
-    setDebug(`attempt=${scanAttempts} decoded text length=${decodedText.length}`);
-    await saveScanToServer(decodedText);
-    setStatus(`Barcode read: ${decodedText}`);
-  } catch (error) {
-    console.error(error);
-    setStatus('Scan failed while reading the frame. Try again or enter the barcode manually.');
-    setDebug(`attempt=${scanAttempts} decode error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
+    const codeToSave = latestDetectedCode;
+    setDebug(`attempt=${scanAttempts} saving latest detected barcode length=${codeToSave.length}`);
+    await saveScanToServer(codeToSave);
+    setStatus(`Barcode registered: ${codeToSave}. Still searching...`);
+  } finally {
+    scanLock = false;
   }
 }
 
 // Stops the live camera feed and clears the ZXing reader state.
 function stopScanner() {
   cameraReady = false;
+  latestDetectedCode = '';
+
+  if (scannerControls && typeof scannerControls.stop === 'function') {
+    try {
+      scannerControls.stop();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  scannerControls = null;
 
   if (codeReader && typeof codeReader.reset === 'function') {
     try {
