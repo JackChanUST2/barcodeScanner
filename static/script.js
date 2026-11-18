@@ -288,6 +288,7 @@ async function scanNow() {
   scanLock = true;
   try {
     const codeToSave = latestDetectedCode;
+    lastCodeEl.textContent = codeToSave;
     setDebug(`attempt=${scanAttempts} saving latest detected barcode length=${codeToSave.length}`);
     await saveScanToServer(codeToSave);
     setStatus(`Barcode registered: ${codeToSave}. Still searching...`);
