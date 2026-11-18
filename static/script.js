@@ -216,7 +216,6 @@ async function startScanner() {
           const decodedText = String(result.getText()).trim();
           if (decodedText) {
             latestDetectedCode = decodedText;
-            lastCodeEl.textContent = decodedText;
             setDebug(`searching active: latest detected=${decodedText}`);
           }
           return;
