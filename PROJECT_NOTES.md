@@ -28,7 +28,7 @@ Stock quantities must be whole numbers from 1 to 9999 per add operation. Product
 ## Frontend
 `static/script.js` handles:
 - ZXing camera decoding.
-- Continuous updating of the Latest scan field.
+- Continuous updating of the status with `Latest detection` while the lower `Scanned Code` field remains unchanged.
 - Manual barcode entry.
 - Positive quantity prompts.
 - New-product name prompts.

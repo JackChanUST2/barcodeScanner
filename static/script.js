@@ -15,7 +15,7 @@ const manualCodeInput = document.getElementById('manualCodeInput');
 const useManualBtn = document.getElementById('useManualBtn');
 
 // Current app version shown in the top header.
-const APP_VERSION = '2.00';
+const APP_VERSION = '2.01';
 
 // Important runtime variables:
 // - codeReader: ZXing reader instance for live frame decoding.
@@ -28,6 +28,7 @@ let cameraReady = false;
 let scannerRunning = false;
 let scannerControls = null;
 let latestDetectedCode = '';
+let latestScannedCode = '';
 
 if (appVersionEl) {
   appVersionEl.textContent = `v${APP_VERSION}`;
@@ -43,17 +44,27 @@ function setDebug(message) {
   debugText.textContent = `Debug: ${message}`;
 }
 
-// Sets the latest detected barcode and updates the UI accordingly.
-function setLatestCode(barcode) {
+// Sets the continuously detected barcode shown in status without changing Scanned Code.
+function setLatestDetectedCode(barcode) {
   const normalized = String(barcode || '').replace(/\s+/g, '').trim();
   if (!normalized) {
     return;
   }
 
   latestDetectedCode = normalized;
+  setStatus(`Latest detection: ${normalized}`);
+}
+
+// Sets the code explicitly confirmed by Scan Barcode or Use Barcode.
+function setScannedCode(barcode) {
+  const normalized = String(barcode || '').replace(/\s+/g, '').trim();
+  if (!normalized) {
+    return;
+  }
+
+  latestScannedCode = normalized;
   lastCodeEl.textContent = normalized;
-  stockResultEl.textContent = 'Barcode ready. Check stock or add stock.';
-  setStatus(`Latest scan: ${normalized}`);
+  stockResultEl.textContent = 'Scanned code ready. Check stock or add stock.';
 }
 
 // Starts the camera stream and prepares the app for scanning.
@@ -110,7 +121,7 @@ async function startScanner() {
     scannerRunning = true;
     const decodePromise = codeReader.decodeFromVideoDevice(undefined, video, (result, error) => {
       if (result) {
-        setLatestCode(result.getText());
+        setLatestDetectedCode(result.getText());
         setDebug(`latest detected=${latestDetectedCode}`);
         return;
       }
@@ -167,13 +178,14 @@ function captureLatestCode() {
     return;
   }
 
-  setLatestCode(latestDetectedCode);
+  setScannedCode(latestDetectedCode);
 }
 
 // Stops the live camera feed and clears the ZXing reader state.
 function stopScanner() {
   cameraReady = false;
   scannerRunning = false;
+  latestDetectedCode = '';
 
   if (scannerControls && typeof scannerControls.stop === 'function') {
     try {
@@ -207,8 +219,8 @@ function stopScanner() {
 
 // Checks the stock for the latest scanned barcode.
 async function checkStock() {
-  if (!latestDetectedCode) {
-    setStatus('There is no Latest scan yet.');
+  if (!latestScannedCode) {
+    setStatus('There is no scanned code yet.');
     return;
   }
 
@@ -216,13 +228,13 @@ async function checkStock() {
     const response = await fetch('/api/stock/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ barcode: latestDetectedCode }),
+      body: JSON.stringify({ barcode: latestScannedCode }),
     });
     const data = await response.json();
 
     if (!response.ok) {
       if (response.status === 404) {
-        stockResultEl.textContent = `Not found: ${latestDetectedCode}. Use Add Stock to create it.`;
+        stockResultEl.textContent = `Not found: ${latestScannedCode}. Use Add Stock to create it.`;
       } else {
         stockResultEl.textContent = data.error || 'Could not check stock.';
       }
@@ -238,8 +250,8 @@ async function checkStock() {
 
 // Adds stock for the latest scanned barcode, or creates a new product if not found.
 async function addStock() {
-  if (!latestDetectedCode) {
-    setStatus('There is no Latest scan yet.');
+  if (!latestScannedCode) {
+    setStatus('There is no scanned code yet.');
     return;
   }
 
@@ -265,7 +277,7 @@ async function addStock() {
     const checkResponse = await fetch('/api/stock/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ barcode: latestDetectedCode }),
+      body: JSON.stringify({ barcode: latestScannedCode }),
     });
 
     if (checkResponse.status === 404) {
@@ -283,7 +295,7 @@ async function addStock() {
     const response = await fetch('/api/stock/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ barcode: latestDetectedCode, quantity, name }),
+      body: JSON.stringify({ barcode: latestScannedCode, quantity, name }),
     });
     const data = await response.json();
 
@@ -315,7 +327,7 @@ function useManualBarcode() {
     return;
   }
 
-  setLatestCode(barcode);
+  setScannedCode(barcode);
   manualCodeInput.value = '';
 }
 
