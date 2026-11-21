@@ -1,37 +1,32 @@
-// Key DOM references for the scanner UI.
+// Key DOM references.
 // These elements are the "live wiring" between the page and the browser logic.
 const appVersionEl = document.getElementById('appVersion');
 const video = document.getElementById('video');
 const statusText = document.getElementById('statusText');
 const debugText = document.getElementById('debugText');
 const lastCodeEl = document.getElementById('lastCode');
-const scanTableBody = document.getElementById('scanTableBody');
+const stockResultEl = document.getElementById('stockResult');
 const startScannerBtn = document.getElementById('startScannerBtn');
 const scanNowBtn = document.getElementById('scanNowBtn');
 const stopScannerBtn = document.getElementById('stopScannerBtn');
+const checkStockBtn = document.getElementById('checkStockBtn');
+const addStockBtn = document.getElementById('addStockBtn');
 const manualCodeInput = document.getElementById('manualCodeInput');
-const saveManualBtn = document.getElementById('saveManualBtn');
-const downloadCsvBtn = document.getElementById('downloadCsvBtn');
-const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
+const useManualBtn = document.getElementById('useManualBtn');
 
 // Current app version shown in the top header.
-const APP_VERSION = '1.05';
+const APP_VERSION = '2.00';
 
 // Important runtime variables:
 // - codeReader: ZXing reader instance for live frame decoding.
 // - stream: active camera stream from getUserMedia.
-// - scanHistory: latest barcode entries loaded from the backend.
 // - cameraReady: tells the app whether the camera is ready to decode.
 // - scanAttempts: counts scan attempts for debug output.
 let codeReader = null;
 let stream = null;
-let scanHistory = [];
-let scanLock = false;
 let cameraReady = false;
-let lastDebugMessage = 'waiting for camera state';
-let scanAttempts = 0;
-let scannerControls = null;
 let scannerRunning = false;
+let scannerControls = null;
 let latestDetectedCode = '';
 
 if (appVersionEl) {
@@ -45,119 +40,20 @@ function setStatus(message) {
 
 // Writes a short technical debug message used during troubleshooting.
 function setDebug(message) {
-  lastDebugMessage = message;
-  if (debugText) {
-    debugText.textContent = `Debug: ${message}`;
-  }
+  debugText.textContent = `Debug: ${message}`;
 }
 
-// Renders the shared scan table from the current scanHistory array.
-function renderHistory() {
-  if (!scanHistory.length) {
-    scanTableBody.innerHTML = '<tr><td colspan="2" class="empty-state">No barcodes saved yet.</td></tr>';
+// Sets the latest detected barcode and updates the UI accordingly.
+function setLatestCode(barcode) {
+  const normalized = String(barcode || '').replace(/\s+/g, '').trim();
+  if (!normalized) {
     return;
   }
 
-  scanTableBody.innerHTML = scanHistory
-    .map(
-      (item) => `
-        <tr>
-          <td>${item.created_at}</td>
-          <td>${item.barcode}</td>
-        </tr>
-      `
-    )
-    .join('');
-}
-
-// Fetches all saved scans from the Flask backend and refreshes the UI.
-async function loadScans() {
-  try {
-    const response = await fetch('/api/scans');
-    if (!response.ok) {
-      throw new Error('Unable to load scans');
-    }
-
-    scanHistory = await response.json();
-    if (scanHistory.length) {
-      lastCodeEl.textContent = scanHistory[0].barcode;
-    }
-    renderHistory();
-  } catch (error) {
-    console.error(error);
-    if (!scanHistory.length) {
-      lastCodeEl.textContent = 'No scan yet';
-    }
-    if (statusText.textContent === 'Ready to scan.' || statusText.textContent === 'Camera is ready when you start scanning.') {
-      setStatus('Ready to scan. Shared scan list will update when the server is available.');
-    }
-  }
-}
-
-// Sends one scanned barcode to the backend and refreshes the shared history.
-async function saveScanToServer(barcode) {
-  try {
-    const response = await fetch('/api/scans', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ barcode }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Save failed');
-    }
-
-    setStatus(`Saved barcode: ${data.barcode}`);
-    lastCodeEl.textContent = data.barcode;
-    await loadScans();
-  } catch (error) {
-    console.error(error);
-    setStatus(error.message || 'Could not save barcode.');
-  }
-}
-
-// Exports the current history as CSV for spreadsheet use.
-function exportCsv() {
-  if (!scanHistory.length) {
-    setStatus('No scans to export yet.');
-    return;
-  }
-
-  const rows = [['Time', 'Barcode']];
-  scanHistory.forEach((item) => rows.push([item.created_at, item.barcode]));
-
-  const sheet = XLSX.utils.aoa_to_sheet(rows);
-  const csv = XLSX.utils.sheet_to_csv(sheet);
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-
-  link.href = URL.createObjectURL(blob);
-  link.download = `barcode-scans-${stamp}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-  setStatus('CSV exported.');
-}
-
-// Exports the same history as Excel (.xlsx) for office workflows.
-function exportExcel() {
-  if (!scanHistory.length) {
-    setStatus('No scans to export yet.');
-    return;
-  }
-
-  const rows = [['Time', 'Barcode']];
-  scanHistory.forEach((item) => rows.push([item.created_at, item.barcode]));
-
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Scans');
-
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  XLSX.writeFile(workbook, `barcode-scans-${stamp}.xlsx`);
-  setStatus('Excel exported.');
+  latestDetectedCode = normalized;
+  lastCodeEl.textContent = normalized;
+  stockResultEl.textContent = 'Barcode ready. Check stock or add stock.';
+  setStatus(`Latest scan: ${normalized}`);
 }
 
 // Starts the camera stream and prepares the app for scanning.
@@ -177,15 +73,21 @@ async function startScanner() {
     setDebug('requesting camera access via getUserMedia');
 
     stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-      },
+      video: { facingMode: { ideal: 'environment' } },
       audio: false,
     });
 
     video.srcObject = stream;
     await video.play();
     cameraReady = true;
+
+    if (!codeReader) {
+      if (typeof ZXing.BrowserMultiFormatReader === 'function') {
+        codeReader = new ZXing.BrowserMultiFormatReader();
+      } else {
+        throw new Error('ZXing browser reader is not available.');
+      }
+    }
 
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
@@ -201,71 +103,42 @@ async function startScanner() {
     ]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
-    if (!codeReader) {
-      if (typeof ZXing.BrowserMultiFormatReader === 'function') {
-        codeReader = new ZXing.BrowserMultiFormatReader(hints);
-      } else if (typeof ZXing.BrowserCodeReader === 'function') {
-        codeReader = new ZXing.BrowserCodeReader(hints);
-      } else {
-        throw new Error('ZXing browser reader is not available in this browser build.');
-      }
-    }
-
     if (typeof codeReader.setHints === 'function') {
       codeReader.setHints(hints);
     }
 
-    if (typeof codeReader.decodeFromVideoDevice === 'function') {
-      scannerRunning = true;
-
-      const decodePromise = codeReader.decodeFromVideoDevice(undefined, video, (result, error) => {
-        if (result) {
-          const decodedText = String(result.getText()).trim();
-          if (decodedText) {
-            latestDetectedCode = decodedText;
-            setDebug(`searching active: latest detected=${decodedText}`);
-          }
-          return;
-        }
-
-        if (!error) {
-          return;
-        }
-
-        const expectedErrors = ['NotFoundException', 'ChecksumException', 'FormatException'];
-        if (expectedErrors.includes(error.name)) {
-          return;
-        }
-
-        //setDebug(`searching error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
-      }, hints);
-
-      if (decodePromise && typeof decodePromise.then === 'function') {
-        decodePromise.then((controls) => {
-          scannerControls = controls || null;
-          setDebug(`camera decoding active=${scannerRunning} controls=${Boolean(scannerControls)}`);
-        }).catch((error) => {
-          if (!scannerRunning) {
-            return;
-          }
-          console.error(error);
-          scannerRunning = false;
-          cameraReady = false;
-          setStatus('Barcode decoding stopped unexpectedly. Restart the camera.');
-          setDebug(`barcode decoding failed: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
-        });
+    scannerRunning = true;
+    const decodePromise = codeReader.decodeFromVideoDevice(undefined, video, (result, error) => {
+      if (result) {
+        setLatestCode(result.getText());
+        setDebug(`latest detected=${latestDetectedCode}`);
+        return;
       }
-    } else {
-      throw new Error('This ZXing build does not support continuous camera decoding.');
+
+      if (error && !['NotFoundException', 'ChecksumException', 'FormatException'].includes(error.name)) {
+        setDebug(`search error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
+      }
+    }, hints);
+
+    if (decodePromise && typeof decodePromise.then === 'function') {
+      decodePromise.then((controls) => {
+        scannerControls = controls || null;
+      }).catch((error) => {
+        if (!scannerRunning) {
+          return;
+        }
+        console.error(error);
+        scannerRunning = false;
+        cameraReady = false;
+        setStatus('Barcode decoding stopped unexpectedly. Restart the camera.');
+      });
     }
 
     setStatus('Camera started. Searching for barcodes...');
-    setDebug(`camera started: active=${Boolean(stream)} ready=${cameraReady} tracks=${stream.getVideoTracks().length}`);
   } catch (error) {
     console.error(error);
     cameraReady = false;
     scannerRunning = false;
-    latestDetectedCode = '';
     scannerControls = null;
 
     if (stream) {
@@ -282,50 +155,25 @@ async function startScanner() {
   }
 }
 
-// Saves the latest detected barcode while camera search continues in the background.
-async function scanNow() {
-  scanAttempts += 1;
-
+// Captures the latest detected code without saving, for immediate stock check.
+function captureLatestCode() {
   if (!cameraReady || !stream || !video.srcObject) {
-    setStatus('Start the camera first, then scan.');
-    setDebug(`scan blocked: cameraReady=${cameraReady} streamExists=${Boolean(stream)} videoReady=${Boolean(video.srcObject)} attempt=${scanAttempts}`);
-    return;
-  }
-
-  if (!scannerRunning) {
-    setStatus('Camera is active, but barcode search is not running yet. Restart the camera.');
-    setDebug(`scan blocked: scannerRunning=false attempt=${scanAttempts}`);
+    setStatus('Start the camera first.');
     return;
   }
 
   if (!latestDetectedCode) {
-    setStatus('No barcode detected yet. Keep the barcode in frame and try again.');
-    setDebug(`scan blocked: no detected barcode available attempt=${scanAttempts}`);
+    setStatus('No barcode detected yet. Keep the barcode in frame.');
     return;
   }
 
-  if (scanLock) {
-    setStatus('A barcode save is already in progress.');
-    return;
-  }
-
-  scanLock = true;
-  try {
-    const codeToSave = latestDetectedCode;
-    lastCodeEl.textContent = codeToSave;
-    setDebug(`attempt=${scanAttempts} saving latest detected barcode length=${codeToSave.length}`);
-    await saveScanToServer(codeToSave);
-    setStatus(`Barcode registered: ${codeToSave}. Still searching...`);
-  } finally {
-    scanLock = false;
-  }
+  setLatestCode(latestDetectedCode);
 }
 
 // Stops the live camera feed and clears the ZXing reader state.
 function stopScanner() {
   cameraReady = false;
   scannerRunning = false;
-  latestDetectedCode = '';
 
   if (scannerControls && typeof scannerControls.stop === 'function') {
     try {
@@ -357,45 +205,128 @@ function stopScanner() {
   setDebug('camera stopped; ready=false');
 }
 
-// Removes whitespace so manual entry matches typical barcode strings.
-function normalizeBarcodeValue(value) {
-  return value.replace(/\s+/g, '').trim();
+// Checks the stock for the latest scanned barcode.
+async function checkStock() {
+  if (!latestDetectedCode) {
+    setStatus('There is no Latest scan yet.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/stock/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode: latestDetectedCode }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        stockResultEl.textContent = `Not found: ${latestDetectedCode}. Use Add Stock to create it.`;
+      } else {
+        stockResultEl.textContent = data.error || 'Could not check stock.';
+      }
+      return;
+    }
+
+    stockResultEl.textContent = `${data.name} — Remaining stock: ${data.quantity}`;
+  } catch (error) {
+    console.error(error);
+    stockResultEl.textContent = 'Could not reach the stock service.';
+  }
 }
 
-// Saves a manually entered barcode if it matches the supported value format.
-async function addManualCode() {
-  const rawValue = manualCodeInput.value || '';
-  const value = normalizeBarcodeValue(rawValue);
-
-  if (!value) {
-    manualCodeInput.setCustomValidity('Please enter a barcode value before saving.');
-    manualCodeInput.reportValidity();
-    setStatus('Type a barcode value before saving.');
+// Adds stock for the latest scanned barcode, or creates a new product if not found.
+async function addStock() {
+  if (!latestDetectedCode) {
+    setStatus('There is no Latest scan yet.');
     return;
   }
 
+  const quantityText = window.prompt('Enter quantity to add (1 to 9999):', '1');
+  if (quantityText === null) {
+    return;
+  }
+
+  if (!/^\d+$/.test(quantityText.trim())) {
+    setStatus('Quantity must be a positive whole number from 1 to 9999.');
+    return;
+  }
+
+  const quantity = Number(quantityText.trim());
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) {
+    setStatus('Quantity must be a positive whole number from 1 to 9999.');
+    return;
+  }
+
+  let name = '';
+
+  try {
+    const checkResponse = await fetch('/api/stock/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode: latestDetectedCode }),
+    });
+
+    if (checkResponse.status === 404) {
+      name = window.prompt('This is a new barcode. Enter the product name:', '');
+      if (name === null) {
+        return;
+      }
+      name = name.trim();
+      if (!name) {
+        setStatus('A product name is required for new stock.');
+        return;
+      }
+    }
+
+    const response = await fetch('/api/stock/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode: latestDetectedCode, quantity, name }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      stockResultEl.textContent = data.error || 'Could not add stock.';
+      return;
+    }
+
+    stockResultEl.textContent = `${data.name} — Remaining stock: ${data.quantity}`;
+    setStatus(`Added ${quantity} item(s).`);
+  } catch (error) {
+    console.error(error);
+    stockResultEl.textContent = 'Could not reach the stock service.';
+  }
+}
+
+// Uses a manually entered barcode for stock checking or adding.
+function useManualBarcode() {
+  const barcode = manualCodeInput.value.replace(/\s+/g, '').trim();
   const validPattern = /^[A-Za-z0-9\-\.\/\+]+$/;
-  if (!validPattern.test(value)) {
-    manualCodeInput.setCustomValidity('Barcode values can contain letters, numbers, and common barcode characters only.');
-    manualCodeInput.reportValidity();
-    setStatus('Barcode values can contain only letters, numbers, and common barcode characters.');
+
+  if (!barcode) {
+    setStatus('Enter a barcode before continuing.');
     return;
   }
 
-  manualCodeInput.setCustomValidity('');
+  if (!validPattern.test(barcode)) {
+    setStatus('Barcode contains unsupported characters.');
+    return;
+  }
+
+  setLatestCode(barcode);
   manualCodeInput.value = '';
-  await saveScanToServer(value);
 }
 
 // Event wiring for the UI buttons.
 startScannerBtn.addEventListener('click', startScanner);
-scanNowBtn.addEventListener('click', scanNow);
+scanNowBtn.addEventListener('click', captureLatestCode);
 stopScannerBtn.addEventListener('click', stopScanner);
-saveManualBtn.addEventListener('click', addManualCode);
-downloadCsvBtn.addEventListener('click', exportCsv);
-downloadXlsxBtn.addEventListener('click', exportExcel);
+checkStockBtn.addEventListener('click', checkStock);
+addStockBtn.addEventListener('click', addStock);
+useManualBtn.addEventListener('click', useManualBarcode);
 
 // Initial app state when the page first loads.
-loadScans();
-setStatus('Ready to scan.');
+setStatus('Ready to scan. Stock data is temporary and resets when the host restarts.');
 setDebug('initial state: page loaded, waiting for camera');

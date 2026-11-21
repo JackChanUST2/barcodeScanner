@@ -6,7 +6,6 @@
     <title>Shared Barcode Scanner</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <main class="app-shell">
@@ -40,6 +39,12 @@
       <section class="panel">
         <h2>Latest scan</h2>
         <div id="lastCode" class="last-code">No scan yet</div>
+        <div id="stockResult" class="stock-result">Scan or enter a barcode to continue.</div>
+
+        <div class="stock-actions">
+          <button id="checkStockBtn" class="primary">Check Stock</button>
+          <button id="addStockBtn" class="secondary">Add Stock</button>
+        </div>
 
         <div class="manual-entry">
           <label for="manualCodeInput">Enter barcode manually</label>
@@ -52,34 +57,8 @@
               pattern="[A-Za-z0-9\-\.\/\+\s]+"
               placeholder="e.g. 1234567890"
             />
-            <button id="saveManualBtn" class="secondary">Save</button>
+            <button id="useManualBtn" class="secondary">Use Barcode</button>
           </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="history-header">
-          <h2>Shared scan history</h2>
-          <div class="export-actions">
-            <button id="downloadCsvBtn" class="secondary small">Export CSV</button>
-            <button id="downloadXlsxBtn" class="primary small">Export Excel</button>
-          </div>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Barcode</th>
-              </tr>
-            </thead>
-            <tbody id="scanTableBody">
-              <tr>
-                <td colspan="2" class="empty-state">No barcodes saved yet.</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </section>
     </main>
