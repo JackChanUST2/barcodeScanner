@@ -7,8 +7,7 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
-# No persistent storage is available, so use one in-memory SQLite database.
-# Data exists only while this Python process is running.
+# Stock data is temporary and resets when the Python process restarts.
 db_lock = threading.Lock()
 db_connection = sqlite3.connect(":memory:", check_same_thread=False)
 db_connection.row_factory = sqlite3.Row
@@ -94,15 +93,18 @@ def add_stock():
             product_name = row["name"]
         else:
             if not name:
-                return jsonify({"error": "A product name is required for a new barcode.", "new_product": True}), 400
+                return jsonify({
+                    "error": "A product name is required for a new barcode.",
+                    "new_product": True,
+                }), 400
 
-            db_connection.execute(
-                "INSERT INTO stock (barcode, name, quantity) VALUES (?, ?, ?)",
-                (barcode, name[:200], quantity),
-            )
-            db_connection.commit()
             product_name = name[:200]
             new_quantity = quantity
+            db_connection.execute(
+                "INSERT INTO stock (barcode, name, quantity) VALUES (?, ?, ?)",
+                (barcode, product_name, new_quantity),
+            )
+            db_connection.commit()
 
     return jsonify({
         "barcode": barcode,
