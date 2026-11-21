@@ -15,7 +15,7 @@ const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 
 // Current app version shown in the top header.
-const APP_VERSION = '1.04';
+const APP_VERSION = '1.05';
 
 // Important runtime variables:
 // - codeReader: ZXing reader instance for live frame decoding.
@@ -31,6 +31,7 @@ let cameraReady = false;
 let lastDebugMessage = 'waiting for camera state';
 let scanAttempts = 0;
 let scannerControls = null;
+let scannerRunning = false;
 let latestDetectedCode = '';
 
 if (appVersionEl) {
@@ -186,16 +187,6 @@ async function startScanner() {
     await video.play();
     cameraReady = true;
 
-    if (!codeReader) {
-      if (typeof ZXing.BrowserMultiFormatReader === 'function') {
-        codeReader = new ZXing.BrowserMultiFormatReader();
-      } else if (typeof ZXing.BrowserCodeReader === 'function') {
-        codeReader = new ZXing.BrowserCodeReader();
-      } else {
-        throw new Error('ZXing browser reader is not available in this browser build.');
-      }
-    }
-
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       ZXing.BarcodeFormat.QR_CODE,
@@ -210,8 +201,24 @@ async function startScanner() {
     ]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
+    if (!codeReader) {
+      if (typeof ZXing.BrowserMultiFormatReader === 'function') {
+        codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      } else if (typeof ZXing.BrowserCodeReader === 'function') {
+        codeReader = new ZXing.BrowserCodeReader(hints);
+      } else {
+        throw new Error('ZXing browser reader is not available in this browser build.');
+      }
+    }
+
+    if (typeof codeReader.setHints === 'function') {
+      codeReader.setHints(hints);
+    }
+
     if (typeof codeReader.decodeFromVideoDevice === 'function') {
-      scannerControls = await codeReader.decodeFromVideoDevice(undefined, video, (result, error) => {
+      scannerRunning = true;
+
+      const decodePromise = codeReader.decodeFromVideoDevice(undefined, video, (result, error) => {
         if (result) {
           const decodedText = String(result.getText()).trim();
           if (decodedText) {
@@ -232,6 +239,22 @@ async function startScanner() {
 
         //setDebug(`searching error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
       }, hints);
+
+      if (decodePromise && typeof decodePromise.then === 'function') {
+        decodePromise.then((controls) => {
+          scannerControls = controls || null;
+          setDebug(`camera decoding active=${scannerRunning} controls=${Boolean(scannerControls)}`);
+        }).catch((error) => {
+          if (!scannerRunning) {
+            return;
+          }
+          console.error(error);
+          scannerRunning = false;
+          cameraReady = false;
+          setStatus('Barcode decoding stopped unexpectedly. Restart the camera.');
+          setDebug(`barcode decoding failed: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
+        });
+      }
     } else {
       throw new Error('This ZXing build does not support continuous camera decoding.');
     }
@@ -241,6 +264,7 @@ async function startScanner() {
   } catch (error) {
     console.error(error);
     cameraReady = false;
+    scannerRunning = false;
     latestDetectedCode = '';
     scannerControls = null;
 
@@ -268,9 +292,9 @@ async function scanNow() {
     return;
   }
 
-  if (!scannerControls) {
+  if (!scannerRunning) {
     setStatus('Camera is active, but barcode search is not running yet. Restart the camera.');
-    setDebug(`scan blocked: scannerControls missing attempt=${scanAttempts}`);
+    setDebug(`scan blocked: scannerRunning=false attempt=${scanAttempts}`);
     return;
   }
 
@@ -300,6 +324,7 @@ async function scanNow() {
 // Stops the live camera feed and clears the ZXing reader state.
 function stopScanner() {
   cameraReady = false;
+  scannerRunning = false;
   latestDetectedCode = '';
 
   if (scannerControls && typeof scannerControls.stop === 'function') {
