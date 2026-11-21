@@ -230,7 +230,7 @@ async function startScanner() {
           return;
         }
 
-        setDebug(`searching error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
+        //setDebug(`searching error: ${error.name || 'Error'} - ${error.message || 'unknown decode error'}`);
       }, hints);
     } else {
       throw new Error('This ZXing build does not support continuous camera decoding.');
